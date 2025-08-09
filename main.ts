@@ -317,8 +317,13 @@ namespace cleanedgerotate {
 
                 let outCol: number[];
                 if (candidates.length) {
-                    // If multiple, pick the “higher” by priority rule
-                    outCol = candidates.reduce((best, cur) => higher(cur, best, hiRGB) ? cur : best);
+                    // start with first element, then compare to rest
+                    let best = candidates[0];
+                    for (let i = 1; i < candidates.length; i++) {
+                        const cur = candidates[i];
+                        if (higher(cur, best, hiRGB)) best = cur;
+                    }
+                    outCol = best;
                 } else {
                     // No slice override → nearest neighbour
                     const sxr = Math.round(sx);
