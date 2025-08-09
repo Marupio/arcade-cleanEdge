@@ -101,6 +101,15 @@ namespace cleanedgerotate {
         };
     }
 
+    function defnum(v: number, d: number): number {
+        return (v === undefined || v === null) ? d : v;
+    }
+    function defbool(v: boolean, d: boolean): boolean {
+        return (v === undefined || v === null) ? d : v;
+    }
+    function sqr(x: number): number { return x * x; } // safer than x**2 in Arcade
+
+
     // Core of the shader: given the local neighbourhood and a sub-pixel point within the current texel,
     // decide whether to take c, f, d, etc., using the edge rules (45° + optional 2:1 slopes).
     function sliceDecide(
@@ -111,12 +120,11 @@ namespace cleanedgerotate {
         options: Options,
         highestRGB: number[]
     ): number[] {
-        const thr = options.similarThreshold ?? 0.0;
-        const enableSlope = options.enableSlope ?? true;
-        const enableCleanup = options.enableCleanup ?? false;
-        const LW = options.lineWidth ?? 1.0;
+        const thr = defnum(options.similarThreshold, 0.0);
+        const enableSlope = defbool(options.enableSlope, true);
+        const enableCleanup = defbool(options.enableCleanup, false);
+        const LW = defnum(options.lineWidth, 1.0);
 
-        // Mimic shader clamped linewidth ranges
         const minW = enableSlope ? 0.45 : 0.0;
         const maxW = enableSlope ? 1.142 : 1.4;
         const lineW = clamp(LW, minW, maxW);
@@ -254,13 +262,13 @@ namespace cleanedgerotate {
     export function rotateCleanEdge(src: Image, angleDeg: number, opts?: Options): Image {
         if (!src) return null;
         const options = opts || {};
-        const outW = options.outW ?? src.width;
-        const outH = options.outH ?? src.height;
-        const cx = (options.cx !== undefined) ? options.cx : (src.width - 1) / 2;
-        const cy = (options.cy !== undefined) ? options.cy : (src.height - 1) / 2;
+        const outW = defnum(options.outW, src.width);
+        const outH = defnum(options.outH, src.height);
+        const cx = defnum(options.cx, (src.width - 1) / 2);
+        const cy = defnum(options.cy, (src.height - 1) / 2);
 
         // highest colour reference
-        const hiIdx = options.highestColorIndex ?? 1; // white by default
+        const hiIdx = defnum(options.highestColorIndex, 1);
         const hiRGB = col4(hiIdx); // use RGB from palette (alpha=1)
 
         const dst = image.create(outW, outH);
