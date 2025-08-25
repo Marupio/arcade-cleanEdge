@@ -22,6 +22,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 //% color=#C040C0 icon="\uf074" block="CleanEdge Rotate"
 namespace cleanedgerotate {
+
     // ------- Options -------
     export interface Options {
         // how similar two colours must be to be considered same (Euclidean in RGBA [0..1])
@@ -61,6 +62,12 @@ namespace cleanedgerotate {
     function distRGBA(a: number[], b: number[]): number {
         const dr = a[0]-b[0], dg = a[1]-b[1], db = a[2]-b[2], da = a[3]-b[3];
         return Math.sqrt(dr*dr + dg*dg + db*db + da*da);
+    }
+
+    function maxCanvas(w: number, h: number): { W: number, H: number } {
+        // Max bounding box for any rotation angle
+        const diag = Math.ceil(Math.sqrt(w * w + h * h));
+        return { W: diag, H: diag };
     }
 
     function similar(a: number[], b: number[], thr: number): boolean {
@@ -130,6 +137,15 @@ namespace cleanedgerotate {
         return (v === undefined || v === null) ? d : v;
     }
     function sqr(x: number): number { return x * x; } // safer than x**2 in Arcade
+
+    function fitBox(w: number, h: number, angRad: number): { W: number, H: number } {
+        // Tighter AABB for a specific angle (not just the diagonal square)
+        const c = Math.abs(Math.cos(angRad));
+        const s = Math.abs(Math.sin(angRad));
+        const W = Math.ceil(w * c + h * s);
+        const H = Math.ceil(w * s + h * c);
+        return { W: W, H: H };
+    }
 
 
     // Core of the shader: given the local neighbourhood and a sub-pixel point within the current texel,
@@ -273,6 +289,16 @@ namespace cleanedgerotate {
 
     // -------- Public API --------
 
+    //% blockId=cleanedge_rotate_center
+    //% block="rotate (clean edge) %src by %angle (°) about x %cx y %cy"
+    //% angle.defl=30 cx.defl=-1 cy.defl=-1 weight=99
+    export function rotateCleanEdgeAbout(src: Image, angle: number, cx: number, cy: number): Image {
+        const opts: Options = {};
+        if (cx >= 0) opts.cx = cx;
+        if (cy >= 0) opts.cy = cy;
+        return rotateCleanEdge(src, angle, opts);
+    }
+
     /**
      * Rotate src by angle (degrees), preserving crisp edges (cleanEdge-inspired).
      * @param src source image
@@ -358,4 +384,232 @@ namespace cleanedgerotate {
         }
         return dst;
     }
+
+    //% blockId=cleanedge_rotate_nocrop
+    //% block="rotate (clean edge, no crop) %src by %angle (°)"
+    //% angle.defl=30 weight=98
+    export function rotateCleanEdgeNoCrop(src: Image, angle: number, opts?: Options): Image {
+        const o = opts || {};
+
+        // Source pivot
+        const scx = (o.cx !== undefined) ? o.cx : (src.width - 1) / 2;
+        const scy = (o.cy !== undefined) ? o.cy : (src.height - 1) / 2;
+
+        // Destination size that exactly fits this angle
+        const a = angle * Math.PI / 180;
+        const box = fitBox(src.width, src.height, a);
+        const outW = box.W;
+        const outH = box.H;
+
+        // Destination pivot = centre of the fitted canvas, so the sprite is visually centred
+        const dcx = (outW - 1) / 2;
+        const dcy = (outH - 1) / 2;
+
+        const dst = image.create(outW, outH);
+        dst.fill(0);
+
+        const cosA = Math.cos(a), sinA = Math.sin(a);
+
+        // Per-pixel inverse mapping using the SAME cleanEdge slice rules as rotateCleanEdge()
+        for (let y = 0; y < outH; y++) {
+            const dy = y - dcy;
+            for (let x = 0; x < outW; x++) {
+                const dx = x - dcx;
+
+                // Map dest→source around the chosen pivot
+                const sx =  cosA * dx + sinA * dy + scx;
+                const sy = -sinA * dx + cosA * dy + scy;
+
+                const ix = Math.floor(sx);
+                const iy = Math.floor(sy);
+                const fx = sx - ix;
+                const fy = sy - iy;
+
+                const nb = neigh(src, ix, iy);
+
+                // Four quadrant tries, just like rotateCleanEdge()
+                const cands: number[][] = [];
+
+                let r = sliceDecide(fx, fy, 1, 1, 1, 1, nb, o, col4(1));
+                if (r[0] >= 0) cands.push(r);
+                r = sliceDecide(1 - fx, fy, -1, 1, -1, 1, nb, o, col4(1));
+                if (r[0] >= 0) cands.push(r);
+                r = sliceDecide(fx, 1 - fy, 1, -1, 1, -1, nb, o, col4(1));
+                if (r[0] >= 0) cands.push(r);
+                r = sliceDecide(1 - fx, 1 - fy, -1, -1, -1, -1, nb, o, col4(1));
+                if (r[0] >= 0) cands.push(r);
+
+                let outCol: number[];
+                if (cands.length) {
+                    let best = cands[0];
+                    for (let i = 1; i < cands.length; i++) {
+                        const cur = cands[i];
+                        if (higher(cur, best, col4(1))) best = cur;
+                    }
+                    outCol = best;
+                } else {
+                    // cleanEdge falls back to nearest of the centre neighbourhood when no slice applies
+                    outCol = sample(src, Math.round(sx), Math.round(sy));
+                }
+                dst.setPixel(x, y, indexOfColor(outCol));
+            }
+        }
+        return dst;
+    }
+
+    class RotationCache {
+        frames: Image[] = [];
+        stepDeg: number;
+        cx: number;
+        cy: number;
+        noCrop: boolean;
+
+        constructor(base: Image, nsteps: number, noCrop: boolean, cx: number, cy: number, opts?: Options) {
+            const steps = Math.max(1, nsteps | 0);
+            this.stepDeg = 360 / steps;
+            this.noCrop = noCrop;
+            this.cx = cx; this.cy = cy;
+
+            const o = opts || {};
+            if (cx >= 0) o.cx = cx;
+            if (cy >= 0) o.cy = cy;
+
+            for (let i = 0; i < steps; i++) {
+                const ang = i * this.stepDeg;
+                let img: Image;
+                if (noCrop) {
+                    img = rotateCleanEdgeNoCrop(base, ang, o);
+                } else {
+                    img = rotateCleanEdge(base, ang, o);
+                }
+                this.frames.push(img);
+            }
+        }
+
+        get(angleDeg: number): Image {
+            // Normalize to [0,360)
+            let a = angleDeg % 360;
+            if (a < 0) a += 360;
+            const idx = Math.round(a / this.stepDeg) % this.frames.length;
+            return this.frames[idx];
+        }
+
+        length(): number { return this.frames.length; }
+    }
+
+    // keep a registry so blocks can reference caches by ID
+    const _rotCaches: RotationCache[] = [];
+
+    /**
+    * Build a rotation cache upfront.
+    * If noCrop is true, frames are padded to avoid clipping.
+    */
+    //% blockId=cleanedge_build_cache
+    //% block="build rotation cache for %img with %nsteps steps || no crop %noCrop about x %cx y %cy"
+    //% nsteps.defl=32 noCrop.defl=true cx.defl=-1 cy.defl=-1
+    //% weight=95
+    export function buildRotationCache(img: Image, nsteps: number, noCrop?: boolean, cx?: number, cy?: number): number {
+        const useNoCrop = defbool(noCrop, true);
+        const pivotX = (cx === undefined) ? -1 : cx;
+        const pivotY = (cy === undefined) ? -1 : cy;
+        const cache = new RotationCache(img, nsteps, useNoCrop, pivotX, pivotY, {});
+        _rotCaches.push(cache);
+        return _rotCaches.length - 1;
+    }
+
+    /**
+    * Get a cached frame closest to angle from a cache ID.
+    */
+    //% blockId=cleanedge_get_cached
+    //% block="cached image from cache %cacheId at angle %angle (°)"
+    //% weight=94
+    export function getCached(cacheId: number, angle: number): Image {
+        if (cacheId < 0 || cacheId >= _rotCaches.length) return null;
+        return _rotCaches[cacheId].get(angle);
+    }
+
+    /**
+    * Scale (clean edge): uses the same neighbourhood + slice rules as rotation,
+    * so axis-aligned edges keep their crisp “stepped” profiles (chamfer-like result).
+    * scale > 1 upscales; 0 < scale < 1 downscales.
+    */
+    //% blockId=cleanedge_scale_about
+    //% block="scale (clean edge) %src by %scale || about x %cx y %cy"
+    //% scale.defl=2 cx.defl=-1 cy.defl=-1 weight=90
+    export function scaleCleanEdge(src: Image, scale: number, cx?: number, cy?: number): Image {
+        if (scale <= 0.01) scale = 0.01;
+
+        const scx = (cx !== undefined) ? cx : (src.width - 1) / 2;
+        const scy = (cy !== undefined) ? cy : (src.height - 1) / 2;
+
+        const outW = Math.max(1, Math.round(src.width * scale));
+        const outH = Math.max(1, Math.round(src.height * scale));
+        const dcx = (outW - 1) / 2;
+        const dcy = (outH - 1) / 2;
+
+        const dst = image.create(outW, outH);
+        dst.fill(0);
+
+        for (let y = 0; y < outH; y++) {
+            const dy = y - dcy;
+            for (let x = 0; x < outW; x++) {
+                const dx = x - dcx;
+
+                // Inverse map: dest→source about pivot
+                const sx = dx / scale + scx;
+                const sy = dy / scale + scy;
+
+                const ix = Math.floor(sx);
+                const iy = Math.floor(sy);
+                const fx = sx - ix;
+                const fy = sy - iy;
+
+                const nb = neigh(src, ix, iy);
+
+                // Same four-direction test; no angle here, but subpixel (fx,fy) still tells us where we are.
+                const cands: number[][] = [];
+                let r = sliceDecide(fx, fy, 1, 1, 1, 1, nb, {}, col4(1)); if (r[0] >= 0) cands.push(r);
+                r = sliceDecide(1 - fx, fy, -1, 1, -1, 1, nb, {}, col4(1)); if (r[0] >= 0) cands.push(r);
+                r = sliceDecide(fx, 1 - fy, 1, -1, 1, -1, nb, {}, col4(1)); if (r[0] >= 0) cands.push(r);
+                r = sliceDecide(1 - fx, 1 - fy, -1, -1, -1, -1, nb, {}, col4(1)); if (r[0] >= 0) cands.push(r);
+
+                let outCol: number[];
+                if (cands.length) {
+                    let best = cands[0];
+                    for (let i = 1; i < cands.length; i++) {
+                        const cur = cands[i];
+                        if (higher(cur, best, col4(1))) best = cur;
+                    }
+                    outCol = best;
+                } else {
+                    outCol = sample(src, Math.round(sx), Math.round(sy));
+                }
+                dst.setPixel(x, y, indexOfColor(outCol));
+            }
+        }
+        return dst;
+    }
+
+    /**
+    * Replace a sprite's image with a clean-edge rotated version (no crop).
+    */
+    //% blockId=cleanedge_rotate_sprite_nocrop
+    //% block="set sprite %spr image to clean-edge rotation of %img by %angle (°)"
+    //% weight=85
+    export function setSpriteRotatedImageNoCrop(spr: Sprite, img: Image, angle: number): void {
+        const rotated = rotateCleanEdgeNoCrop(img, angle, {});
+        spr.setImage(rotated);
+    }
+
+    /**
+    * Replace a sprite's image using a rotation cache.
+    */
+    //% blockId=cleanedge_apply_cache_sprite
+    //% block="set sprite %spr image from cache %cacheId at angle %angle (°)"
+    //% weight=84
+    export function setSpriteImageFromCache(spr: Sprite, cacheId: number, angle: number): void {
+        const img = getCached(cacheId, angle);
+        if (img) spr.setImage(img);
+    }
+
 }
