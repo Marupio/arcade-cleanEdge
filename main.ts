@@ -289,16 +289,6 @@ namespace cleanedgerotate {
 
     // -------- Public API --------
 
-    //% blockId=cleanedge_rotate_center
-    //% block="rotate (clean edge) %src by %angle (°) about x %cx y %cy"
-    //% angle.defl=30 cx.defl=-1 cy.defl=-1 weight=99
-    export function rotateCleanEdgeAbout(src: Image, angle: number, cx: number, cy: number): Image {
-        const opts: Options = {};
-        if (cx >= 0) opts.cx = cx;
-        if (cy >= 0) opts.cy = cy;
-        return rotateCleanEdge(src, angle, opts);
-    }
-
     /**
      * Rotate src by angle (degrees), preserving crisp edges (cleanEdge-inspired).
      * @param src source image
@@ -385,8 +375,20 @@ namespace cleanedgerotate {
         return dst;
     }
 
+    //% blockId=cleanedge_rotate_center
+    //% block="rotate (clean edge) %src by %angle (°) about x %cx y %cy"
+    //% src.shadow=variables_get
+    //% angle.defl=30 cx.defl=-1 cy.defl=-1 weight=99
+    export function rotateCleanEdgeAbout(src: Image, angle: number, cx: number, cy: number): Image {
+        const opts: Options = {};
+        if (cx >= 0) opts.cx = cx;
+        if (cy >= 0) opts.cy = cy;
+        return rotateCleanEdge(src, angle, opts);
+    }
+
     //% blockId=cleanedge_rotate_nocrop
     //% block="rotate (clean edge, no crop) %src by %angle (°)"
+    //% src.shadow=variables_get
     //% angle.defl=30 weight=98
     export function rotateCleanEdgeNoCrop(src: Image, angle: number, opts?: Options): Image {
         const o = opts || {};
@@ -504,8 +506,12 @@ namespace cleanedgerotate {
     * Build a rotation cache upfront.
     * If noCrop is true, frames are padded to avoid clipping.
     */
+    //% blockId=cleanedge_rotate block="rotate (clean edge) %src by %angleDeg (°)"
+    //% src.shadow=variables_get angleDeg.defl=30 weight=100
+
     //% blockId=cleanedge_build_cache
     //% block="build rotation cache for %img with %nsteps steps || no crop %noCrop about x %cx y %cy"
+    //% img.shadow=variables_get
     //% nsteps.defl=32 noCrop.defl=true cx.defl=-1 cy.defl=-1
     //% weight=95
     export function buildRotationCache(img: Image, nsteps: number, noCrop?: boolean, cx?: number, cy?: number): number {
@@ -535,6 +541,7 @@ namespace cleanedgerotate {
     */
     //% blockId=cleanedge_scale_about
     //% block="scale (clean edge) %src by %scale || about x %cx y %cy"
+    //% src.shadow=variables_get
     //% scale.defl=2 cx.defl=-1 cy.defl=-1 weight=90
     export function scaleCleanEdge(src: Image, scale: number, cx?: number, cy?: number): Image {
         if (scale <= 0.01) scale = 0.01;
@@ -595,6 +602,7 @@ namespace cleanedgerotate {
     */
     //% blockId=cleanedge_rotate_sprite_nocrop
     //% block="set sprite %spr image to clean-edge rotation of %img by %angle (°)"
+    //% spr.shadow=variables_get
     //% weight=85
     export function setSpriteRotatedImageNoCrop(spr: Sprite, img: Image, angle: number): void {
         const rotated = rotateCleanEdgeNoCrop(img, angle, {});
@@ -606,6 +614,7 @@ namespace cleanedgerotate {
     */
     //% blockId=cleanedge_apply_cache_sprite
     //% block="set sprite %spr image from cache %cacheId at angle %angle (°)"
+    //% spr.shadow=variables_get
     //% weight=84
     export function setSpriteImageFromCache(spr: Sprite, cacheId: number, angle: number): void {
         const img = getCached(cacheId, angle);
