@@ -330,7 +330,7 @@ namespace cleanedgerotate {
         const cacheId = sprites.readDataNumber(spr, KEY_ROT_CACHE);
         if (isNaN(cacheId)) {
             // Not prepared: do a one-off no-crop rotate so the block still “does something”
-            const img = rotateCleanEdgeNoCrop(spr.image, angle, {});
+            const img = rotateCleanEdge(spr.image, angle, {});
             spr.setImage(img);
             return;
         }
@@ -396,11 +396,11 @@ namespace cleanedgerotate {
     //% expandableArgumentMode="enabled"
     //% weight=69
     //% group="Advanced"
-    export function rotateImageCleanEdgeNoCrop(src: Image, angle: number, cx: number, cy: number, opts?: Options): Image {
+    export function rotateImageCleanEdge(src: Image, angle: number, cx: number, cy: number, opts?: Options): Image {
         const o = opts || {};
         if (cx >= 0) o.cx = cx;
         if (cy >= 0) o.cy = cy;
-        return rotateCleanEdgeNoCrop(src, angle, o);
+        return rotateCleanEdge(src, angle, o);
     }
 
 
