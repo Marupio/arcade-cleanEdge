@@ -298,7 +298,7 @@ namespace cleanedgerotate {
     //% block="prepare sprite %spr for cleanEdge rotation with %nsteps steps offset x %cx y %cy || options %opts"
     //% expandableArgumentMode="enabled"
     //% nsteps.defl=32
-    //% cx.defl=0 cy.defl=0
+    //% cx.defl=-1 cy.defl=-1
     //% spr.shadow=variables_get
     //% weight=100
     //% group="Easy to use"
@@ -391,8 +391,8 @@ namespace cleanedgerotate {
 
     //% blockId=cleanedge_rotate_image_nocrop
     //% block="rotate image (cleanEdge, no crop) %src by %angle (°) about x %cx y %cy || options %opts"
-    //% spr.shadow=variables_get
-    //% angle.defl=30 cx.defl=0 cy.defl=0
+    //% src.shadow=variables_get
+    //% angle.defl=30 cx.defl=-1 cy.defl=-1
     //% expandableArgumentMode="enabled"
     //% weight=69
     //% group="Advanced"
@@ -406,8 +406,8 @@ namespace cleanedgerotate {
 
     //% blockId=cleanedge_scale_image
     //% block="scale image (cleanEdge) %src by %scale about x %cx y %cy || options %opts"
-    //% spr.shadow=variables_get
-    //% scale.defl=2 cx.defl=0 cy.defl=0
+    //% src.shadow=variables_get
+    //% scale.defl=2 cx.defl=-1 cy.defl=-1
     //% expandableArgumentMode="enabled"
     //% weight=68
     //% group="Advanced"
@@ -527,54 +527,39 @@ namespace cleanedgerotate {
     //% group="Legacy blocks"
     export function rotateCleanEdgeNoCrop(src: Image, angle: number, opts?: Options): Image {
         const o = opts || {};
-
-        // Source pivot
         const scx = (o.cx !== undefined) ? o.cx : (src.width - 1) / 2;
         const scy = (o.cy !== undefined) ? o.cy : (src.height - 1) / 2;
 
-        // Destination size that exactly fits this angle
-        const a = angle * Math.PI / 180;
-        const box = fitBox(src.width, src.height, a);
-        const outW = box.W;
-        const outH = box.H;
-
-        // Destination pivot = centre of the fitted canvas, so the sprite is visually centred
+        const box = maxCanvas(src.width, src.height);  // <-- fixed across angles
+        const outW = box.W, outH = box.H;
         const dcx = (outW - 1) / 2;
         const dcy = (outH - 1) / 2;
 
         const dst = image.create(outW, outH);
         dst.fill(0);
 
+        const a = angle * Math.PI / 180;
         const cosA = Math.cos(a), sinA = Math.sin(a);
 
-        // Per-pixel inverse mapping using the SAME cleanEdge slice rules as rotateCleanEdge()
         for (let y = 0; y < outH; y++) {
             const dy = y - dcy;
             for (let x = 0; x < outW; x++) {
                 const dx = x - dcx;
 
-                // Map dest→source around the chosen pivot
                 const sx =  cosA * dx + sinA * dy + scx;
                 const sy = -sinA * dx + cosA * dy + scy;
 
                 const ix = Math.floor(sx);
                 const iy = Math.floor(sy);
-                const fx = sx - ix;
-                const fy = sy - iy;
+                const fx = sx - ix, fy = sy - iy;
 
                 const nb = neigh(src, ix, iy);
 
-                // Four quadrant tries, just like rotateCleanEdge()
                 const cands: number[][] = [];
-
-                let r = sliceDecide(fx, fy, 1, 1, 1, 1, nb, o, col4(1));
-                if (r[0] >= 0) cands.push(r);
-                r = sliceDecide(1 - fx, fy, -1, 1, -1, 1, nb, o, col4(1));
-                if (r[0] >= 0) cands.push(r);
-                r = sliceDecide(fx, 1 - fy, 1, -1, 1, -1, nb, o, col4(1));
-                if (r[0] >= 0) cands.push(r);
-                r = sliceDecide(1 - fx, 1 - fy, -1, -1, -1, -1, nb, o, col4(1));
-                if (r[0] >= 0) cands.push(r);
+                let r = sliceDecide(fx, fy, 1, 1, 1, 1, nb, o, col4(1)); if (r[0] >= 0) cands.push(r);
+                r = sliceDecide(1 - fx, fy, -1, 1, -1, 1, nb, o, col4(1)); if (r[0] >= 0) cands.push(r);
+                r = sliceDecide(fx, 1 - fy, 1, -1, 1, -1, nb, o, col4(1)); if (r[0] >= 0) cands.push(r);
+                r = sliceDecide(1 - fx, 1 - fy, -1, -1, -1, -1, nb, o, col4(1)); if (r[0] >= 0) cands.push(r);
 
                 let outCol: number[];
                 if (cands.length) {
@@ -585,7 +570,6 @@ namespace cleanedgerotate {
                     }
                     outCol = best;
                 } else {
-                    // cleanEdge falls back to nearest of the centre neighbourhood when no slice applies
                     outCol = sample(src, Math.round(sx), Math.round(sy));
                 }
                 dst.setPixel(x, y, indexOfColor(outCol));
@@ -593,6 +577,7 @@ namespace cleanedgerotate {
         }
         return dst;
     }
+
 
     class RotationCache {
         frames: Image[] = [];
