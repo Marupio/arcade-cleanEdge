@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Edge-preserving pixel-art rotation (cleanEdge-inspired) for MakeCode Arcade.",
   "files": ["main.ts", "README.md", "LICENSE"],
-  "dependencies": { "device": "*" },
+  "dependencies": {
+    "device": "*",
+    "sprite-data": "*"
+  },
   "preferredEditor": "tsprj"
 }
