@@ -79,20 +79,22 @@ namespace cleanedgerotate {
         return distRGBA(a, b) <= thr;
     }
 
+    function sqr(x: number): number { return x * x; }
+
     function higher(thisCol: number[], other: number[], highestRGB: number[]): boolean {
         // if similar, not higher
         // alpha priority; else distance to highestColor (RGB) smaller wins
         if (thisCol[3] === 0 && other[3] === 0) return false;
         if (thisCol[3] === other[3]) {
             const d1 = Math.sqrt(
-                (thisCol[0]-highestRGB[0])**2 +
-                (thisCol[1]-highestRGB[1])**2 +
-                (thisCol[2]-highestRGB[2])**2
+                sqr((thisCol[0]-highestRGB[0])) +
+                sqr((thisCol[1]-highestRGB[1])) +
+                sqr((thisCol[2]-highestRGB[2]))
             );
             const d2 = Math.sqrt(
-                (other[0]-highestRGB[0])**2 +
-                (other[1]-highestRGB[1])**2 +
-                (other[2]-highestRGB[2])**2
+                sqr(other[0]-highestRGB[0]) +
+                sqr(other[1]-highestRGB[1]) +
+                sqr(other[2]-highestRGB[2])
             );
             return d1 < d2;
         }
@@ -139,7 +141,6 @@ namespace cleanedgerotate {
     function defbool(v: boolean, d: boolean): boolean {
         return (v === undefined || v === null) ? d : v;
     }
-    function sqr(x: number): number { return x * x; } // safer than x**2 in Arcade
 
     function fitBox(w: number, h: number, angRad: number): { W: number, H: number } {
         // Tighter AABB for a specific angle (not just the diagonal square)
@@ -284,7 +285,7 @@ namespace cleanedgerotate {
         let best = 1, bestD = 1e9;
         for (let i = 1; i < 16; i++) {
             const c = col4(i);
-            const d = (c[0]-col[0])**2 + (c[1]-col[1])**2 + (c[2]-col[2])**2;
+            const d = sqr(c[0]-col[0]) + sqr(c[1]-col[1]) + sqr(c[2]-col[2]);
             if (d < bestD) { bestD = d; best = i; }
         }
         return best;
@@ -292,7 +293,7 @@ namespace cleanedgerotate {
 
     // -------- Public API --------
 
-    //% groups=['Easy to use', 'Advanced' 'Legacy blocks', 'others']
+    //% groups=['Easy to use', 'Advanced', 'Legacy blocks', 'others']
 
     //% blockId=cleanedge_prepare_sprite
     //% block="prepare sprite %spr for cleanEdge rotation with %nsteps steps offset x %cx y %cy || options %opts"
@@ -626,9 +627,6 @@ namespace cleanedgerotate {
     * Build a rotation cache upfront.
     * If noCrop is true, frames are padded to avoid clipping.
     */
-    //% blockId=cleanedge_rotate block="rotate (clean edge) %src by %angleDeg (°)"
-    //% src.shadow=variables_get angleDeg.defl=30 weight=100
-
     //% blockId=cleanedge_build_cache
     //% block="build rotation cache for %img with %nsteps steps || no crop %noCrop about x %cx y %cy"
     //% img.shadow=variables_get
